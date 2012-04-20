@@ -1,42 +1,26 @@
+Official BitPenny Client Source Code (www.BitPenny.com)
+based on Bitcoin 0.5.1 codebase
 
-Bitcoin integration/staging tree
 
-Development process
+Purpose
 ===================
 
-Developers work in their own trees, then submit pull requests when
-they think their feature or bug fix is ready.
+This source code is released with the intention of allowing community members
+to inspect and customize the BitPenny Client in order to improve security and
+prevent the possibility of >50% mining power attacks by the server.  
+Developers are free to make changes to the code, submit pull requests, and 
+develop alternate clients.  The BitPenny Client is meant to be used together 
+with the BitPenny mining pool server, which is not open source.  By using this
+software, you agree to do so in good faith and to not deliberately harm the
+BitPenny server. 
 
-If it is a simple/trivial/non-controversial change, then one of the
-bitcoin development team members simply pulls it.
 
-If it is a more complicated or potentially controversial
-change, then the patch submitter will be asked to start a
-discussion (if they haven't already) on the mailing list:
-http://sourceforge.net/mailarchive/forum.php?forum_name=bitcoin-development
+How To Build
+===================
+	git clone git://github.com/ForceMajeure/BitPenny-Client.git
+	cd BitPenny-Client/src
+	make -f makefile.bitpenny.unix bitpennyd
+ 
+edit and place bitpenny.conf into the .bitpenny/ directory
 
-The patch will be accepted if there is broad consensus that it is a
-good thing.  Developers should expect to rework and resubmit patches
-if they don't match the project's coding conventions (see coding.txt)
-or are controversial.
-
-The master branch is regularly built and tested, but is not guaranteed
-to be completely stable. Tags are regularly created to indicate new
-official, stable release versions of Bitcoin. If you would like to
-help test the Bitcoin core, please contact QA@BitcoinTesting.org.
-
-Feature branches are created when there are major new features being
-worked on by several people.
-
-From time to time a pull request will become outdated. If this occurs, and
-the pull is no longer automatically mergeable; a comment on the pull will
-be used to issue a warning of closure. The pull will be closed 15 days
-after the warning if action is not taken by the author. Pull requests closed
-in this manner will have their corresponding issue labeled 'stagnant'.
-
-Issues with no commits will be given a similar warning, and closed after
-15 days from their last activity. Issues closed in this manner will be 
-labeled 'stale'. 
-
-Requests to reopen closed pull requests and/or issues can be submitted to 
-QA@BitcoinTesting.org. 
+For dependencies, see doc/build-unix.txt

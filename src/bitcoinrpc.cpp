@@ -29,6 +29,10 @@ typedef boost::asio::ssl::stream<boost::asio::ip::tcp::socket> SSLStream;
 // a certain size around 145MB.  If we need access to json_spirit outside this
 // file, we could use the compiled json_spirit option.
 
+#ifdef BITPENNY
+#include "bitpenny_client.h"
+#endif
+
 using namespace std;
 using namespace boost;
 using namespace boost::asio;
@@ -349,6 +353,10 @@ Value getinfo(const Array& params, bool fHelp)
     if (pwalletMain->IsCrypted())
         obj.push_back(Pair("unlocked_until", (boost::int64_t)nWalletUnlockTime / 1000));
     obj.push_back(Pair("errors",        GetWarnings("statusbar")));
+    #ifdef BITPENNY
+	bitpennyinfo(obj);
+#endif
+    
     return obj;
 }
 
@@ -1757,6 +1765,7 @@ Value validateaddress(const Array& params, bool fHelp)
     return ret;
 }
 
+#ifndef BITPENNY
 Value getwork(const Array& params, bool fHelp)
 {
     if (fHelp || params.size() > 1)
@@ -1947,6 +1956,7 @@ Value getmemorypool(const Array& params, bool fHelp)
         return ProcessBlock(NULL, &pblock);
     }
 }
+#endif
 
 Value getblockhash(const Array& params, bool fHelp)
 {
@@ -2008,9 +2018,11 @@ pair<string, rpcfn_type> pCallTable[] =
     make_pair("getblocknumber",         &getblocknumber),
     make_pair("getconnectioncount",     &getconnectioncount),
     make_pair("getdifficulty",          &getdifficulty),
+#ifndef BITPENNY
     make_pair("getgenerate",            &getgenerate),
     make_pair("setgenerate",            &setgenerate),
     make_pair("gethashespersec",        &gethashespersec),
+#endif    
     make_pair("getinfo",                &getinfo),
     make_pair("getmininginfo",          &getmininginfo),
     make_pair("getnewaddress",          &getnewaddress),
@@ -2044,10 +2056,27 @@ pair<string, rpcfn_type> pCallTable[] =
     make_pair("getwork",                &getwork),
     make_pair("listaccounts",           &listaccounts),
     make_pair("settxfee",               &settxfee),
+#ifndef BITPENNY    
     make_pair("getmemorypool",          &getmemorypool),
+#endif
     make_pair("listsinceblock",         &listsinceblock),
     make_pair("dumpprivkey",            &dumpprivkey),
-    make_pair("importprivkey",          &importprivkey)
+    make_pair("importprivkey",          &importprivkey),
+#ifdef BITPENNY
+    make_pair("getpool",               &getpool),
+    make_pair("setpool",               &setpool),
+    make_pair("getpooldisablesolo",    &getdisablesolo),
+    make_pair("setpooldisablesolo",    &setdisablesolo),
+    make_pair("setprintblocks",        &setprintblocks),
+    make_pair("setstatsinterval",      &setstatsinterval),
+    make_pair("listsinceblock",        &listsinceblock),
+    make_pair("getblockmonitor",       &getblockmonitor),
+    make_pair("setblockmonitor",       &setblockmonitor),
+    make_pair("setblockmonitortarget", &setblockmonitortarget),
+    make_pair("delblockmonitortarget", &delblockmonitortarget),
+    make_pair("listblockmonitortargets", &listblockmonitortargets),
+
+#endif    
 };
 map<string, rpcfn_type> mapCallTable(pCallTable, pCallTable + sizeof(pCallTable)/sizeof(pCallTable[0]));
 
@@ -2059,9 +2088,11 @@ string pAllowInSafeMode[] =
     "getblocknumber",  // deprecated
     "getconnectioncount",
     "getdifficulty",
+#ifndef BITPENNY
     "getgenerate",
     "setgenerate",
     "gethashespersec",
+#endif
     "getinfo",
     "getmininginfo",
     "getnewaddress",
@@ -2074,7 +2105,19 @@ string pAllowInSafeMode[] =
     "walletlock",
     "validateaddress",
     "getwork",
+#ifdef BITPENNY
+    "getpool",
+    "setpool",
+    "getpooldisablesolo",
+    "setpooldisablesolo",
+    "getblockmonitor",
+    "setblockmonitor",
+    "setblockmonitortarget",
+    "delblockmonitortarget",
+    "listblockmonitortargets",
+#else
     "getmemorypool",
+#endif
 };
 set<string> setAllowInSafeMode(pAllowInSafeMode, pAllowInSafeMode + sizeof(pAllowInSafeMode)/sizeof(pAllowInSafeMode[0]));
 
@@ -2151,6 +2194,10 @@ static string HTTPReply(int nStatus, const string& strMsg)
             "Content-Length: %d\r\n"
             "Content-Type: application/json\r\n"
             "Server: bitcoin-json-rpc/%s\r\n"
+#ifdef BITPENNY
+			"x-blocknum: %d\r\n"
+			"x-poolmode: %d\r\n"
+#endif
             "\r\n"
             "%s",
         nStatus,
@@ -2158,6 +2205,10 @@ static string HTTPReply(int nStatus, const string& strMsg)
         rfc1123Time().c_str(),
         strMsg.size(),
         FormatFullVersion().c_str(),
+#ifdef BITPENNY
+		nBestHeight,
+		((fDisableSoloMode || fMiningSolo)? 0 : 1),
+#endif
         strMsg.c_str());
 }
 
@@ -2526,6 +2577,12 @@ void ThreadRPCServer2(void* parg)
             {
                 // Execute
                 Value result;
+#ifdef BITPENNY
+                strRPCPeerAddress = peer.address().to_string();
+                if (strMethod == "getwork")
+                	result = (*(*mi).second)(params, false);
+                else
+#endif
                 CRITICAL_BLOCK(cs_main)
                 CRITICAL_BLOCK(pwalletMain->cs_wallet)
                     result = (*(*mi).second)(params, false);
@@ -2661,6 +2718,15 @@ int CommandLineRPC(int argc, char *argv[])
         //
         // Special case non-string parameter types
         //
+#ifdef BITPENNY
+        if (strMethod == "setpool"                && n > 0) ConvertTo<bool>(params[0]);
+        if (strMethod == "setpooldisablesolo"     && n > 0) ConvertTo<bool>(params[0]);
+        if (strMethod == "setprintblocks"         && n > 0) ConvertTo<bool>(params[0]);
+        if (strMethod == "setstatsinterval"       && n > 0) ConvertTo<boost::int64_t>(params[0]);
+        if (strMethod == "setblockmonitor"        && n > 0) ConvertTo<bool>(params[0]);
+        if (strMethod == "setblockmonitortarget"  && n > 0) ConvertTo<boost::int64_t>(params[n-1]);
+        if (strMethod == "delblockmonitortarget"  && n > 0) ConvertTo<boost::int64_t>(params[n-1]);
+ #endif
         if (strMethod == "setgenerate"            && n > 0) ConvertTo<bool>(params[0]);
         if (strMethod == "setgenerate"            && n > 1) ConvertTo<boost::int64_t>(params[1]);
         if (strMethod == "sendtoaddress"          && n > 1) ConvertTo<double>(params[1]);

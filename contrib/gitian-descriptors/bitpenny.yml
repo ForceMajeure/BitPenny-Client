@@ -1,0 +1,43 @@
+---
+name: "bitpenny"
+suites:
+- "lucid"
+architectures:
+- "i386"
+- "amd64"
+packages:
+- "libdb4.8++-dev"
+- "libboost-system-dev"
+- "libboost-filesystem-dev"
+- "libboost-program-options-dev"
+- "libboost-thread-dev"
+- "libssl-dev"
+- "git-core"
+- "unzip"
+reference_datetime: "2011-01-30 00:00:00"
+remotes:
+- "url": "https://github.com/ForceMajeure/BitPenny-Client"
+  "dir": "bitpenny-client"
+files:
+- "miniupnpc-1.6.tar.gz"
+script: |
+  INSTDIR="$HOME/install"
+  export LIBRARY_PATH="$INSTDIR/lib"
+  #
+  tar xzf miniupnpc-1.6.tar.gz
+  cd miniupnpc-1.6
+  INSTALLPREFIX=$INSTDIR make $MAKEOPTS install
+  cd ..
+  #
+  cd bitpenny-client
+  mkdir -p $OUTDIR/src
+  cp -a . $OUTDIR/src
+  rm -rf $OUTDIR/src/.git
+  cp $OUTDIR/src/doc/README $OUTDIR
+  cp $OUTDIR/src/COPYING $OUTDIR
+  cd src
+  sed 's/$(DEBUGFLAGS)//' -i makefile.bitpenny.unix
+  make -f makefile.bitpenny.unix STATIC=1 DEFS="-DBITPENNY -I$INSTDIR/include -L$INSTDIR/lib" $MAKEOPTS bitpennyd USE_UPNP=0
+  mkdir -p $OUTDIR/bin/$GBUILD_BITS
+  install -s bitpennyd $OUTDIR/bin/$GBUILD_BITS
+

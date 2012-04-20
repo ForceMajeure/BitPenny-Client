@@ -63,6 +63,9 @@ int64 nHPSTimerStart;
 // Settings
 int64 nTransactionFee = 0;
 
+#ifdef BITPENNY
+#include "bitpenny_client.h"
+#endif
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1558,6 +1561,10 @@ bool CBlock::SetBestChain(CTxDB& txdb, CBlockIndex* pindexNew)
     nTransactionsUpdated++;
     printf("SetBestChain: new best=%s  height=%d  work=%s\n", hashBestChain.ToString().substr(0,20).c_str(), nBestHeight, bnBestChainWork.ToString().c_str());
 
+#ifdef BITPENNY
+    if (fBlockMonitor && !fIsInitialDownload)
+    	BlockMonitor();
+#else
     std::string strCmd = GetArg("-blocknotify", "");
 
     if (!fIsInitialDownload && !strCmd.empty())
@@ -1565,7 +1572,7 @@ bool CBlock::SetBestChain(CTxDB& txdb, CBlockIndex* pindexNew)
         boost::replace_all(strCmd, "%s", hashBestChain.GetHex());
         boost::thread t(runCommand, strCmd); // thread runs free
     }
-
+#endif
     return true;
 }
 
@@ -2185,7 +2192,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         CAddress addrFrom;
         uint64 nNonce = 1;
         vRecv >> pfrom->nVersion >> pfrom->nServices >> nTime >> addrMe;
+#ifdef BITPENNY
+        if (pfrom->nVersion < 40002)
+#else
         if (pfrom->nVersion < 209)
+#endif
         {
             // Since February 20, 2012, the protocol is initiated at version 209,
             // and earlier versions are no longer supported
@@ -2763,7 +2774,13 @@ bool ProcessMessages(CNode* pfrom)
         bool fRet = false;
         try
         {
-            CRITICAL_BLOCK(cs_main)
+
+#ifdef BITPENNY
+        	if (pfrom == pnodeBitpennyHost)
+            	fRet = ProcessBitpennyMessage(pfrom, strCommand, vMsg);
+            if (!fRet)
+#endif
+        	CRITICAL_BLOCK(cs_main)
                 fRet = ProcessMessage(pfrom, strCommand, vMsg);
             if (fShutdown)
                 return true;

@@ -64,6 +64,9 @@ map<CInv, int64> mapAlreadyAskedFor;
 set<CNetAddr> setservAddNodeAddresses;
 CCriticalSection cs_setservAddNodeAddresses;
 
+#ifdef BITPENNY
+#include "bitpenny_client.h"
+#endif
 
 
 unsigned short GetListenPort()
@@ -1296,13 +1299,20 @@ void ThreadOpenConnections2(void* parg)
                         nOutbound++;
             int nMaxOutboundConnections = MAX_OUTBOUND_CONNECTIONS;
             nMaxOutboundConnections = min(nMaxOutboundConnections, (int)GetArg("-maxconnections", 125));
+        
+        #ifdef BITPENNY
+            // monitor pool connection, start it only after at lease one outbound connection is active
+            if (nOutbound > 0 && fBitpennyPoolMode)
+            	CheckPoolConnection();
+        #endif
+            
             if (nOutbound < nMaxOutboundConnections)
                 break;
             vnThreadsRunning[THREAD_OPENCONNECTIONS]--;
             Sleep(2000);
             vnThreadsRunning[THREAD_OPENCONNECTIONS]++;
             if (fShutdown)
-                return;
+                return; 
         }
 
         bool fAddSeeds = false;
@@ -1534,7 +1544,11 @@ void ThreadMessageHandler2(void* parg)
         // Reduce vnThreadsRunning so StopNode has permission to exit while
         // we're sleeping, but we must always check fShutdown after doing this.
         vnThreadsRunning[THREAD_MESSAGEHANDLER]--;
+#ifdef BITPENNY
+        Sleep(10);
+#else
         Sleep(100);
+#endif
         if (fRequestShutdown)
             Shutdown(NULL);
         vnThreadsRunning[THREAD_MESSAGEHANDLER]++;
@@ -1742,8 +1756,10 @@ void StartNode(void* parg)
     if (!CreateThread(ThreadDumpAddress, NULL))
         printf("Error; CreateThread(ThreadDumpAddress) failed\n");
 
+	#ifndef BITPENNY
     // Generate coins in the background
     GenerateBitcoins(GetBoolArg("-gen", false), pwalletMain);
+    #endif
 }
 
 bool StopNode()

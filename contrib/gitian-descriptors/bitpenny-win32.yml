@@ -1,0 +1,57 @@
+---
+name: "bitpenny"
+suites:
+- "lucid"
+architectures:
+- "i386"
+packages: 
+- "mingw32"
+- "git-core"
+- "unzip"
+- "nsis"
+- "faketime"
+reference_datetime: "2011-01-30 00:00:00"
+remotes:
+- "url": "https://github.com/ForceMajeure/BitPenny-Client"
+  "dir": "bitpenny-client"
+files:
+- "boost-win32-1.47.0-gitian.zip"
+- "bitcoin-deps-0.0.3.zip"
+script: |
+  #
+  mkdir boost_1_47_0
+  cd boost_1_47_0
+  mkdir -p stage/lib
+  unzip ../boost-win32-1.47.0-gitian.zip
+  cd bin/$GBUILD_BITS
+  for lib in *; do
+    i586-mingw32msvc-ar rc ../../stage/lib/libboost_${lib}-mt-s.a $lib/*.o
+    i586-mingw32msvc-ranlib ../../stage/lib/libboost_${lib}-mt-s.a
+  done
+  cd ../..
+  mv include/boost .
+  cd ..
+  #
+  unzip bitcoin-deps-0.0.3.zip
+  #
+  find -type f | xargs touch --date="$REFERENCE_DATETIME"
+  #
+  cd bitpenny-client
+  mkdir -p $OUTDIR/src
+  cp -a . $OUTDIR/src
+  rm -rf $OUTDIR/src/.git
+  cp $OUTDIR/src/doc/README_windows.txt $OUTDIR/readme.txt
+  cp $OUTDIR/src/COPYING $OUTDIR/license.txt
+  export LD_PRELOAD=/usr/lib/faketime/libfaketime.so.1
+  export FAKETIME=$REFERENCE_DATETIME
+  export TZ=UTC
+  #
+  cd src
+  sed 's/$(DEBUGFLAGS)/-frandom-seed=bitcoin/' -i makefile.bitpenny.linux-mingw
+  export LD_PRELOAD=/usr/lib/faketime/libfaketime.so.1
+  export FAKETIME=$REFERENCE_DATETIME
+  export TZ=UTC
+  make -f makefile.bitpenny.linux-mingw $MAKEOPTS DEPSDIR=$HOME/build bitpennyd.exe USE_UPNP=0
+  i586-mingw32msvc-strip bitpennyd.exe
+  # mkdir $OUTDIR/daemon
+  cp bitpennyd.exe $OUTDIR

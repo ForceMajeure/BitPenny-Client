@@ -24,6 +24,10 @@ Q_IMPORT_PLUGIN(qkrcodecs)
 Q_IMPORT_PLUGIN(qtaccessiblewidgets)
 #endif
 
+#ifdef BITPENNY
+bool BitpennyInit();
+#endif
+
 using namespace std;
 using namespace boost;
 
@@ -288,6 +292,11 @@ bool AppInit2(int argc, char* argv[])
         int ret = CommandLineRPC(argc, argv);
         exit(ret);
     }
+#endif
+
+#ifdef BITPENNY
+    if (!BitpennyInit())
+    	return false;
 #endif
 
 #if !defined(WIN32) && !defined(QT_GUI)
