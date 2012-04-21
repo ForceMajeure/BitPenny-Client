@@ -67,7 +67,7 @@ all: bitpennyd.exe
 obj/%.o: %.cpp $(HEADERS)
 	i586-mingw32msvc-g++ -c $(CFLAGS) -o $@ $<
 
-bitpennydd.exe: $(OBJS:obj/%=obj/%)
+bitpennyd.exe: $(OBJS:obj/%=obj/%)
 	i586-mingw32msvc-g++ $(CFLAGS) -o $@ $(LIBPATHS) $^ $(LIBS)
 
 
