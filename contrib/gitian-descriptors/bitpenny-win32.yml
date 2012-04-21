@@ -16,7 +16,7 @@ remotes:
   "dir": "bitpenny-client"
 files:
 - "boost-win32-1.47.0-gitian.zip"
-- "bitcoin-deps-0.0.3.zip"
+- "bitpenny-deps-0.0.3.zip"
 script: |
   #
   mkdir boost_1_47_0
@@ -32,7 +32,7 @@ script: |
   mv include/boost .
   cd ..
   #
-  unzip bitcoin-deps-0.0.3.zip
+  unzip bitpenny-deps-0.0.3.zip
   #
   find -type f | xargs touch --date="$REFERENCE_DATETIME"
   #
