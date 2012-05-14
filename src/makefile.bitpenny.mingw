@@ -15,18 +15,19 @@ LIBPATHS= \
  -L"C:\openssl-1.0.0d-mgw"
 
 LIBS= \
- -l boost_system-mgw46-mt-s-1_47 \
- -l boost_filesystem-mgw46-mt-s-1_47 \
- -l boost_program_options-mgw46-mt-s-1_47 \
- -l boost_thread-mgw46-mt-s-1_47 \
+ -l boost_system-mgw45-mt-s-1_47 \
+ -l boost_filesystem-mgw45-mt-s-1_47 \
+ -l boost_program_options-mgw45-mt-s-1_47 \
+ -l boost_thread-mgw45-mt-s-1_47 \
  -l db_cxx \
  -l ssl \
  -l crypto
 
-DEFS=-DWIN32 -D_WINDOWS -DNOPCH -DUSE_SSL -DBOOST_THREAD_USE_LIB -DBITPENNY
+DEFS=-DWIN32 -D_WINDOWS -DBOOST_THREAD_USE_LIB -DBITPENNY
 DEBUGFLAGS=-g
 CFLAGS=-mthreads -O2 -w -Wno-invalid-offsetof -Wformat $(DEBUGFLAGS) $(DEFS) $(INCLUDEPATHS)
 
+TESTDEFS = -DTEST_DATA_DIR=$(abspath test/data)
 
 ifdef USE_UPNP
  INCLUDEPATHS += -I"C:\miniupnpc-1.6-mgw"
@@ -41,6 +42,7 @@ LIBS += -l kernel32 -l user32 -l gdi32 -l comdlg32 -l winspool -l winmm -l shell
 HEADERS = $(wildcard *.h)
 
 OBJS= \
+    obj/version.o \
     obj/checkpoints.o \
     obj/netbase.o \
     obj/addrman.o \
@@ -58,6 +60,8 @@ OBJS= \
     obj/script.o \
     obj/util.o \
     obj/wallet.o \
+    obj/walletdb.o \
+    obj/noui.o \
     obj/bitpenny_client.o
 
 
@@ -69,16 +73,16 @@ obj/%.o: %.cpp $(HEADERS)
 bitpennyd.exe: $(OBJS:obj/%=obj/%)
 	g++ $(CFLAGS) -o $@ $(LIBPATHS) $^ $(LIBS)
 
-obj/test/test_bitcoin.o: $(wildcard test/*.cpp) $(HEADERS)
-	g++ -c $(CFLAGS) -o $@ test/test_bitcoin.cpp
+TESTOBJS := $(patsubst test/%.cpp,obj-test/%.o,$(wildcard test/*.cpp))
 
-test_bitcoin.exe: obj/test/test_bitcoin.o $(filter-out obj/init.o,$(OBJS:obj/%=obj/%))
-	g++ $(CFLAGS) -o $@ $(LIBPATHS) $^ $(LIBS)
+obj-test/%.o: test/%.cpp $(HEADERS)
+	g++ -c $(TESTDEFS) $(CFLAGS) -o $@ $<
+
+test_bitcoin.exe: $(TESTOBJS) $(filter-out obj/init.o,$(OBJS:obj/%=obj/%))
+	g++ $(CFLAGS) -o $@ $(LIBPATHS) $^ -lboost_unit_test_framework $(LIBS)
 
 clean:
 	-del /Q bitpennyd test_bitcoin
 	-del /Q obj\*
-	-del /Q obj\nogui\*
-	-del /Q obj\test\*
-	-del /Q test\*.o
-	-del /Q headers.h.gch
+	-del /Q obj-test\*
+	-del /Q build.h

@@ -25,7 +25,6 @@
 
 #ifndef BITPENNY_STATS_H_
 #define BITPENNY_STATS_H_
-#include "headers.h"
 #include "boost/tuple/tuple.hpp"
 #include "serialize.h"
 

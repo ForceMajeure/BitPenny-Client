@@ -23,8 +23,6 @@
 	THE SOFTWARE.
 */
 
-
-#include "headers.h"
 #include "net.h"
 #include "json/json_spirit_reader_template.h"
 #include "json/json_spirit_writer_template.h"
@@ -38,7 +36,7 @@ using namespace std;
 
 string FormatVersion(int nVersion);
 
-int nBitpennyClientVersion = 50000;
+int nBitpennyClientVersion = 50100;
 
 // bitpenny connection details
 bool fBitpennyPoolMode = false;
@@ -147,27 +145,22 @@ void MinerLog(const char* pszFormat, ...)
 	int ret = 0;
 	static FILE* fileout = NULL;
 	static int nDayOpened = 0;
-    	struct tm *tmTime ;
+	struct tm *tmTime ;
 
 	time_t nTime = GetTime();
 
-    	tmTime = localtime(&nTime);
+	tmTime = localtime(&nTime);
 
-	if (!fileout || nDayOpened != tmTime->tm_yday)
+	if (!fileout || nDayOpened != tmTime.tm_yday)
 	{
 		if(fileout) fclose(fileout);
 
-	    char pszTime[200];
-	    strftime(pszTime, sizeof(pszTime), "%Y%m%d", tmTime);
-	    char pszFile[MAX_PATH+100];
-		GetDataDir(pszFile);
-
-		strlcat(pszFile, "/miner-", sizeof(pszFile));
-		strlcat(pszFile, pszTime, sizeof(pszFile));
-		strlcat(pszFile, ".log", sizeof(pszFile));
-		fileout = fopen(pszFile, "a");
+		char pszTime[200];
+		strftime(pszTime, sizeof(pszTime), "miner-%Y%m%d.log", &tmTime);
+		boost::filesystem::path pathMiner = GetDataDir() / pszTime;
+		fileout = fopen(pathMiner.string().c_str(), "a");
 		if (fileout) setbuf(fileout, NULL); // unbuffered
-		nDayOpened = tmTime->tm_yday;
+		nDayOpened = tmTime.tm_yday;
 	}
 
 	if (fileout)
@@ -220,14 +213,9 @@ void MinerLog(const char* pszFormat, ...)
 		if(fileout) fclose(fileout);
 
 	    char pszTime[200];
-	    strftime(pszTime, sizeof(pszTime), "%Y%m%d", &tmTime);
-	    char pszFile[MAX_PATH+100];
-		GetDataDir(pszFile);
-
-		strlcat(pszFile, "/miner-", sizeof(pszFile));
-		strlcat(pszFile, pszTime, sizeof(pszFile));
-		strlcat(pszFile, ".log", sizeof(pszFile));
-		fileout = fopen(pszFile, "a");
+	    strftime(pszTime, sizeof(pszTime), "miner-%Y%m%d.log", &tmTime);
+		boost::filesystem::path pathMiner = GetDataDir() / pszTime;
+		fileout = fopen(pathMiner.string().c_str(), "a");
 		if (fileout) setbuf(fileout, NULL); // unbuffered
 		nDayOpened = tmTime.tm_yday;
 	}
@@ -260,7 +248,7 @@ bool BitpennyInit()
     if (strPoolUserId == "" || !address.IsValid())
     {
     	fprintf(stderr, "pooluserid=%s\n", strPoolUserId.c_str());
-        fprintf(stderr, "Warning: make sure pooluserid is set to a valid Bitcoin Address in the configuration file: %s\n", GetConfigFile().c_str());
+        fprintf(stderr, "Warning: make sure pooluserid is set to a valid Bitcoin Address in the configuration file: %s\n", GetConfigFile().string().c_str());
         return false;
     }
 
@@ -268,7 +256,7 @@ bool BitpennyInit()
 
     if (mapArgs["-poolhost"] == "")
     {
-    	fprintf(stderr, "Warning: make sure poolhost is set in the configuration file: %s\n", GetConfigFile().c_str());
+    	fprintf(stderr, "Warning: make sure poolhost is set in the configuration file: %s\n", GetConfigFile().string().c_str());
     	return false;
     }
 
@@ -493,9 +481,10 @@ Value setblockmonitor(const Array& params, bool fHelp)
     	if (fMonitor)
     		LoadBlockMonitorTargets();  //re-load static targets
     	else
-    		CRITICAL_BLOCK(cs_sBlockMonitorTargets)
-    			sBlockMonitorTargets.clear();
-
+    	{
+    		LOCK(cs_sBlockMonitorTargets);
+    		sBlockMonitorTargets.clear();
+    	}
     	fBlockMonitor = fMonitor;
     }
 
@@ -522,10 +511,10 @@ Value setblockmonitortarget(const Array& params, bool fHelp)
     }
 
     CService target(strHost, nPort, fAllowDNS);
-
-    CRITICAL_BLOCK(cs_sBlockMonitorTargets)
+    {
+    	LOCK(cs_sBlockMonitorTargets);
     	sBlockMonitorTargets.insert(target);
-
+    }
     return Value::null;
 }
 
@@ -549,10 +538,10 @@ Value delblockmonitortarget(const Array& params, bool fHelp)
     }
 
     CService target(strHost, nPort, fAllowDNS);
-
-    CRITICAL_BLOCK(cs_sBlockMonitorTargets)
+    {
+    	LOCK(cs_sBlockMonitorTargets);
     	sBlockMonitorTargets.erase(target);
-
+    }
     return Value::null;
 }
 
@@ -563,15 +552,15 @@ Value listblockmonitortargets(const Array& params, bool fHelp)
         throw runtime_error("listblockmonitortargets\n");
 
     Array ret;
-
-    CRITICAL_BLOCK(cs_sBlockMonitorTargets)
+    {
+    	LOCK(cs_sBlockMonitorTargets);
 		BOOST_FOREACH(CService target, sBlockMonitorTargets)
 		{
     		Object obj;
             obj.push_back(Pair("target", target.ToStringIPPort()));
             ret.push_back(obj);
 		}
-
+    }
     return ret;
 }
 
@@ -598,8 +587,8 @@ void bitpennyinfo(Object& obj)
 	obj.push_back(Pair("pooltarget",     			hashBitpennyPoolTarget.GetHex()));
 	obj.push_back(Pair("poolsharevalue", 			ValueFromAmount(nMinerBounty)));
 
-	CRITICAL_BLOCK(cs_ServerStats)
 	{
+		LOCK(cs_ServerStats);
 		obj.push_back(Pair("poolstatstime",			LocalDateTimeStrFormat("%x %H:%M:%S", ServerStats.nTime)));
 		obj.push_back(Pair("poolhashrates",			ServerStats.HashRatesToStr()));
 		obj.push_back(Pair("poolcounts",			ServerStats.CountsToStr()));
@@ -663,14 +652,16 @@ bool MinerCheckWork(uint256& hash, uint256& hashTarget, CBlock* pblock, CWallet&
     printf("generated %s\n", FormatMoney(pblock->vtx[0].vout[0].nValue).c_str());
 
     // Found a solution
-    CRITICAL_BLOCK(cs_main)
     {
+        LOCK(cs_main);
         if (pblock->hashPrevBlock != hashBestChain)
             return error("BitcoinMiner : generated block is stale");
 
         // Track how many getdata requests this block gets
-        CRITICAL_BLOCK(wallet.cs_wallet)
+        {
+            LOCK(wallet.cs_wallet);
             wallet.mapRequestCount[pblock->GetHash()] = 0;
+        }
 
         // Process this block the same as if we had received it from another node
         if (!ProcessBlock(NULL, pblock))
@@ -781,38 +772,36 @@ Value getwork(const Array& params, bool fHelp)
 
 		if (fBitpennyPoolMode)
 		{
-	        CRITICAL_BLOCK(cs_lBlockCandidates)
+	        LOCK(cs_lBlockCandidates);
+			bool fConnected = IsConnectedToBitpenny();
+
+			if (nCurrentBlockCandidate > 0 && (!fConnected || nCurrentBlockCandidate < nBestHeight))
 			{
-	        	bool fConnected = IsConnectedToBitpenny();
+				// outdated block candidates
+				lBlockCandidates.clear();
+				setBlockCandidates.clear();
+				nCurrentBlockCandidate = 0;
+				fNewPoolBlockIsAvailable = false;
+				// can no longer use this
+				pPoolWorkItem = NULL;
+			}
 
-	        	if (nCurrentBlockCandidate > 0 && (!fConnected || nCurrentBlockCandidate < nBestHeight))
-	        	{
-	        		// outdated block candidates
-					lBlockCandidates.clear();
-					setBlockCandidates.clear();
-					nCurrentBlockCandidate = 0;
+			// check if we need a new pool block
+			if (fConnected && nCurrentBlockCandidate >= nBestHeight && (pPoolWorkItem == NULL || fNewPoolBlockIsAvailable))
+			{
+				// do we have a suitable block?
+				if (!lBlockCandidates.empty())
+				{
+					BlockCandidate* pbc = &lBlockCandidates.back();
+					pPoolWorkItem = new WorkItem(pbc);
+					if (!pPoolWorkItem)
+						throw JSONRPCError(-7, "Out of memory");
+					vNewBlock.push_back(pPoolWorkItem);
 					fNewPoolBlockIsAvailable = false;
-					// can no longer use this
+					// MinerLog("picking up new pool block\n");
+				}
+				else
 					pPoolWorkItem = NULL;
-	        	}
-
-	        	// check if we need a new pool block
-	        	if (fConnected && nCurrentBlockCandidate >= nBestHeight && (pPoolWorkItem == NULL || fNewPoolBlockIsAvailable))
-	        	{
-	        		// do we have a suitable block?
-	        		if (!lBlockCandidates.empty())
-	        		{
-	        			BlockCandidate* pbc = &lBlockCandidates.back();
-	        			pPoolWorkItem = new WorkItem(pbc);
-	        			if (!pPoolWorkItem)
-	        				throw JSONRPCError(-7, "Out of memory");
-	        			vNewBlock.push_back(pPoolWorkItem);
-	        			fNewPoolBlockIsAvailable = false;
-	        			// MinerLog("picking up new pool block\n");
-	        		}
-	        		else
-	        			pPoolWorkItem = NULL;
-	        	}
 			}
 		}
 		else
@@ -825,7 +814,7 @@ Value getwork(const Array& params, bool fHelp)
 			throw JSONRPCError(-9, "BitPenny solo mode disabled");
 		}
 
-		if (pPoolWorkItem == NULL && (pSoloWorkItem == NULL || nTransactionsUpdated != nTransactionsUpdatedLast && GetTime() - nStart > 60))
+		if (pPoolWorkItem == NULL && (pSoloWorkItem == NULL || (nTransactionsUpdated != nTransactionsUpdatedLast && (GetTime() - nStart) > 60)))
 		{
 			nTransactionsUpdatedLast = nTransactionsUpdated;
 			nStart = GetTime();
@@ -945,9 +934,9 @@ Value getwork(const Array& params, bool fHelp)
         if (pwi != NULL && pwi->fPool)
         {
         	// check if work item is still alive
-        	CRITICAL_BLOCK(cs_lBlockCandidates)
-        		if (!setBlockCandidates.count(pwi->nBlockId))
-        			pwi = NULL;
+			LOCK(cs_lBlockCandidates);
+			if (!setBlockCandidates.count(pwi->nBlockId))
+				pwi = NULL;
         }
 
         if (pwi == NULL)
@@ -1052,49 +1041,47 @@ bool ProcessBitpennyMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
 		vRecv >> bc.nBlockNumber >> bc.nBlockId >> bc.block >> nMinerBounty;
 
-		CRITICAL_BLOCK(cs_lBlockCandidates)
+		LOCK(cs_lBlockCandidates);
+
+		if (bc.nBlockNumber > nCurrentBlockCandidate)
 		{
-			if (bc.nBlockNumber > nCurrentBlockCandidate)
-			{
-				lBlockCandidates.clear();
-				setBlockCandidates.clear();
-				nCurrentBlockCandidate = 0;
-				fNewPoolBlockIsAvailable = false;
-			}
-
-			if (bc.nBlockNumber >= nBestHeight)
-			{
-				lBlockCandidates.push_back(bc);
-				setBlockCandidates.insert(bc.nBlockId);
-				nCurrentBlockCandidate = bc.nBlockNumber;
-				fNewPoolBlockIsAvailable = true;
-
-				int64 nMyValueOut = 0;
-				int64 nBlockValueOut = 0;
-				BOOST_FOREACH(const CTxOut& txout, bc.block.vtx[0].vout)
-				{
-					nBlockValueOut += txout.nValue;
-					if (txout.scriptPubKey == scriptMyPubKey)
-						nMyValueOut = txout.nValue;
-				}
-
-				nMyShareInCurrentBlock = nMyValueOut;
-
-				MinerLog("block candidate %d id=%u with %d transactions. Coinbase value %s. My share is %s BTC.\n",
-						bc.nBlockNumber, bc.nBlockId, bc.block.vtx.size(), FormatMoney(nBlockValueOut, false).c_str(), FormatMoney(nMyValueOut, false).c_str());
-
-				if (fPrintBlocks)
-					bc.block.print();
-
-				// we are mining solo. let miner know that pool block is available
-				// helpful for miners using nTime rotation
-				if (fBlockMonitor && fMiningSolo)
-						BlockMonitor("Pool Block");
-			}
-			else
-				printf("Stale block %d from Bitpenny\n", bc.nBlockNumber);
+			lBlockCandidates.clear();
+			setBlockCandidates.clear();
+			nCurrentBlockCandidate = 0;
+			fNewPoolBlockIsAvailable = false;
 		}
 
+		if (bc.nBlockNumber >= nBestHeight)
+		{
+			lBlockCandidates.push_back(bc);
+			setBlockCandidates.insert(bc.nBlockId);
+			nCurrentBlockCandidate = bc.nBlockNumber;
+			fNewPoolBlockIsAvailable = true;
+
+			int64 nMyValueOut = 0;
+			int64 nBlockValueOut = 0;
+			BOOST_FOREACH(const CTxOut& txout, bc.block.vtx[0].vout)
+			{
+				nBlockValueOut += txout.nValue;
+				if (txout.scriptPubKey == scriptMyPubKey)
+					nMyValueOut = txout.nValue;
+			}
+
+			nMyShareInCurrentBlock = nMyValueOut;
+
+			MinerLog("block candidate %d id=%u with %d transactions. Coinbase value %s. My share is %s BTC.\n",
+					bc.nBlockNumber, bc.nBlockId, bc.block.vtx.size(), FormatMoney(nBlockValueOut, false).c_str(), FormatMoney(nMyValueOut, false).c_str());
+
+			if (fPrintBlocks)
+				bc.block.print();
+
+			// we are mining solo. let miner know that pool block is available
+			// helpful for miners using nTime rotation
+			if (fBlockMonitor && fMiningSolo)
+					BlockMonitor("Pool Block");
+		}
+		else
+			printf("Stale block %d from Bitpenny\n", bc.nBlockNumber);
 	}
 	else if (strCommand == "bp:rejected")
 	{
@@ -1111,19 +1098,15 @@ bool ProcessBitpennyMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 	}
 	else if (strCommand == "bp:s_stats")
 	{
-		CRITICAL_BLOCK(cs_ServerStats)
-		{
-			vRecv >> ServerStats;
-			MinerLog("s_stats: %s\n", ServerStats.ToStr().c_str());
-		}
+		LOCK(cs_ServerStats);
+		vRecv >> ServerStats;
+		MinerLog("s_stats: %s\n", ServerStats.ToStr().c_str());
 	}
 	else if (strCommand == "bp:c_stats")
 	{
-		CRITICAL_BLOCK(cs_ServerStats)
-		{
-			vRecv >> ClientStats;
-			MinerLog("c_stats: %s\n", ClientStats.ToStr().c_str());
-		}
+		LOCK(cs_ServerStats);
+		vRecv >> ClientStats;
+		MinerLog("c_stats: %s\n", ClientStats.ToStr().c_str());
 	}
 	else if (strCommand == "bp:message")
 	{
@@ -1171,8 +1154,8 @@ void BlockMonitor(const char *msg)
 		struct sockaddr_in saddr;
 		int addrlen = sizeof(saddr);
 
-		CRITICAL_BLOCK(cs_sBlockMonitorTargets)
 		{
+			LOCK(cs_sBlockMonitorTargets);
 			BOOST_FOREACH(CService target, sBlockMonitorTargets)
 			{
 				if(target.GetSockAddr(&saddr))
@@ -1192,39 +1175,38 @@ void BlockMonitor(const char *msg)
 static void LoadBlockMonitorTargets()
 {
 
-	CRITICAL_BLOCK(cs_sBlockMonitorTargets)
+	LOCK(cs_sBlockMonitorTargets);
+
+	sBlockMonitorTargets.clear();
+
+	BOOST_FOREACH(string line, mapMultiArgs["-blockmonitortarget"])
 	{
-		sBlockMonitorTargets.clear();
-
-		BOOST_FOREACH(string line, mapMultiArgs["-blockmonitortarget"])
+		size_t nPos = line.rfind(':');
+		if (nPos == string::npos || nPos == 0)
 		{
-			size_t nPos = line.rfind(':');
-			if (nPos == string::npos || nPos == 0)
-			{
-				printf("blockmonitortarget invalid address: %s. Parameter format is host:port.\n", line.c_str());
-				continue;
-			}
+			printf("blockmonitortarget invalid address: %s. Parameter format is host:port.\n", line.c_str());
+			continue;
+		}
 
-			string host, port;
-			host.assign(line.begin(), line.begin() + nPos);
-			port.assign(line.begin() + nPos + 1, line.end());
+		string host, port;
+		host.assign(line.begin(), line.begin() + nPos);
+		port.assign(line.begin() + nPos + 1, line.end());
 
-			if (fDebug)
-				printf("blockmonitortarget host=%s port=%s\n", host.c_str(), port.c_str());
+		if (fDebug)
+			printf("blockmonitortarget host=%s port=%s\n", host.c_str(), port.c_str());
 
-			int nPort = lexical_cast<int>(port);
+		int nPort = lexical_cast<int>(port);
 
-			CService addr(host, nPort, fAllowDNS);
+		CService addr(host, nPort, fAllowDNS);
 
-			if (addr.IsValid())
-			{
-				sBlockMonitorTargets.insert(addr);
-			}
-			else
-			{
-				printf("blockmonitortarget invalid address: %s\n", line.c_str());
-				continue;
-			}
+		if (addr.IsValid())
+		{
+			sBlockMonitorTargets.insert(addr);
+		}
+		else
+		{
+			printf("blockmonitortarget invalid address: %s\n", line.c_str());
+			continue;
 		}
 	}
 }
