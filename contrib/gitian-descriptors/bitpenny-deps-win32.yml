@@ -13,7 +13,7 @@ packages:
 reference_datetime: "2011-01-30 00:00:00"
 remotes: []
 files:
-- "openssl-1.0.0e.tar.gz"
+- "openssl-1.0.1b.tar.gz"
 - "db-4.8.30.NC.tar.gz"
 - "miniupnpc-1.6.tar.gz"
 - "zlib-1.2.6.tar.gz"
@@ -23,8 +23,8 @@ script: |
   export FAKETIME=$REFERENCE_DATETIME
   export TZ=UTC
   #
-  tar xzf openssl-1.0.0e.tar.gz
-  cd openssl-1.0.0e
+  tar xzf openssl-1.0.1b.tar.gz
+  cd openssl-1.0.1b
   ./Configure --cross-compile-prefix=i586-mingw32msvc- mingw
   make
   cd ..
@@ -48,7 +48,7 @@ script: |
   make -f win32/Makefile.gcc PREFIX=i586-mingw32msvc- $MAKEOPTS
   cd ..
   #
-  zip -r $OUTDIR/bitpenny-deps-0.0.3.zip \
+  zip -r $OUTDIR/bitpenny-deps-0.0.4.zip \
     $(ls db-*/build_unix/{libdb_cxx.a,db.h,db_cxx.h,libdb.a,.libs/libdb_cxx-?.?.a} | sort) \
     $(find openssl-* -name '*.a' -o -name '*.h' | sort) \
     $(find miniupnpc -name '*.h' -o -name 'libminiupnpc.a' | sort)

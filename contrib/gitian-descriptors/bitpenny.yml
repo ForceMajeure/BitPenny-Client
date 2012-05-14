@@ -31,13 +31,11 @@ script: |
   #
   cd bitpenny-client
   mkdir -p $OUTDIR/src
-  cp -a . $OUTDIR/src
-  rm -rf $OUTDIR/src/.git
+  git archive HEAD | tar -x -C $OUTDIR/src
   cp $OUTDIR/src/doc/README $OUTDIR
   cp $OUTDIR/src/COPYING $OUTDIR
   cd src
-  sed 's/$(DEBUGFLAGS)//' -i makefile.bitpenny.unix
-  make -f makefile.bitpenny.unix STATIC=1 DEFS="-DBITPENNY -I$INSTDIR/include -L$INSTDIR/lib" $MAKEOPTS bitpennyd USE_UPNP=0
+  make -f makefile.bitpenny.unix STATIC=1 OPENSSL_INCLUDE_PATH="$INSTDIR/include" OPENSSL_LIB_PATH="$INSTDIR/lib" $MAKEOPTS bitpennyd USE_UPNP=0 DEBUGFLAGS=
   mkdir -p $OUTDIR/bin/$GBUILD_BITS
   install -s bitpennyd $OUTDIR/bin/$GBUILD_BITS
 

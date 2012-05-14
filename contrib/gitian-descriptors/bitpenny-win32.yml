@@ -16,7 +16,7 @@ remotes:
   "dir": "bitpenny-client"
 files:
 - "boost-win32-1.47.0-gitian.zip"
-- "bitpenny-deps-0.0.3.zip"
+- "bitpenny-deps-0.0.4.zip"
 script: |
   #
   mkdir boost_1_47_0
@@ -32,14 +32,13 @@ script: |
   mv include/boost .
   cd ..
   #
-  unzip bitpenny-deps-0.0.3.zip
+  unzip bitpenny-deps-0.0.4.zip
   #
   find -type f | xargs touch --date="$REFERENCE_DATETIME"
   #
   cd bitpenny-client
   mkdir -p $OUTDIR/src
-  cp -a . $OUTDIR/src
-  rm -rf $OUTDIR/src/.git
+  git archive HEAD | tar -x -C $OUTDIR/src
   cp $OUTDIR/src/doc/README_windows.txt $OUTDIR/readme.txt
   cp $OUTDIR/src/COPYING $OUTDIR/license.txt
   export LD_PRELOAD=/usr/lib/faketime/libfaketime.so.1
@@ -47,11 +46,10 @@ script: |
   export TZ=UTC
   #
   cd src
-  sed 's/$(DEBUGFLAGS)/-frandom-seed=bitcoin/' -i makefile.bitpenny.linux-mingw
   export LD_PRELOAD=/usr/lib/faketime/libfaketime.so.1
   export FAKETIME=$REFERENCE_DATETIME
   export TZ=UTC
-  make -f makefile.bitpenny.linux-mingw $MAKEOPTS DEPSDIR=$HOME/build bitpennyd.exe USE_UPNP=0
+  make -f makefile.bitpenny.linux-mingw $MAKEOPTS DEPSDIR=$HOME/build bitpennyd.exe USE_UPNP=0 DEBUGFLAGS="-frandom-seed=bitcoin"
   i586-mingw32msvc-strip bitpennyd.exe
   # mkdir $OUTDIR/daemon
   cp bitpennyd.exe $OUTDIR
