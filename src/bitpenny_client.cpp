@@ -151,16 +151,16 @@ void MinerLog(const char* pszFormat, ...)
 
 	tmTime = localtime(&nTime);
 
-	if (!fileout || nDayOpened != tmTime.tm_yday)
+	if (!fileout || nDayOpened != tmTime->tm_yday)
 	{
 		if(fileout) fclose(fileout);
 
 		char pszTime[200];
-		strftime(pszTime, sizeof(pszTime), "miner-%Y%m%d.log", &tmTime);
+		strftime(pszTime, sizeof(pszTime), "miner-%Y%m%d.log", tmTime);
 		boost::filesystem::path pathMiner = GetDataDir() / pszTime;
 		fileout = fopen(pathMiner.string().c_str(), "a");
 		if (fileout) setbuf(fileout, NULL); // unbuffered
-		nDayOpened = tmTime.tm_yday;
+		nDayOpened = tmTime->tm_yday;
 	}
 
 	if (fileout)
