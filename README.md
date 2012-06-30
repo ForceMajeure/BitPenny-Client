@@ -1,5 +1,5 @@
 Official BitPenny Client Source Code (www.BitPenny.com)
-based on Bitcoin 0.6.2 codebase
+based on Bitcoin 0.6.3 codebase
 
 
 Purpose
