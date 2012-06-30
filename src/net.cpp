@@ -1,7 +1,7 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2012 The Bitcoin developers
 // Distributed under the MIT/X11 software license, see the accompanying
-// file license.txt or http://www.opensource.org/licenses/mit-license.php.
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "irc.h"
 #include "db.h"
@@ -35,7 +35,7 @@ void ThreadOpenAddedConnections2(void* parg);
 void ThreadMapPort2(void* parg);
 #endif
 void ThreadDNSAddressSeed2(void* parg);
-bool OpenNetworkConnection(const CAddress& addrConnect);
+bool OpenNetworkConnection(const CAddress& addrConnect, bool fUseGrant = true);
 
 
 
@@ -68,10 +68,7 @@ CCriticalSection cs_setservAddNodeAddresses;
 #include "bitpenny_client.h"
 #endif
 
-static CWaitableCriticalSection csOutbound;
-static int nOutbound = 0;
-static CConditionVariable condOutbound;
-
+static CSemaphore *semOutbound = NULL;
 
 
 unsigned short GetListenPort()
@@ -373,10 +370,6 @@ CNode* ConnectNode(CAddress addrConnect, int64 nTimeout)
             LOCK(cs_vNodes);
             vNodes.push_back(pnode);
         }
-        {
-            WAITABLE_LOCK(csOutbound);
-            nOutbound++;
-        }
 
         pnode->nTimeConnected = GetTime();
         return pnode;
@@ -522,14 +515,9 @@ void ThreadSocketHandler2(void* parg)
                     // remove from vNodes
                     vNodes.erase(remove(vNodes.begin(), vNodes.end(), pnode), vNodes.end());
 
-                    if (!pnode->fInbound)
-                        {
-                            WAITABLE_LOCK(csOutbound);
-                            nOutbound--;
-
-                            // Connection slot(s) were removed, notify connection creator(s)
-                            NOTIFY(condOutbound);
-                        }
+                    if (pnode->fHasGrant)
+                        semOutbound->post();
+                    pnode->fHasGrant = false;
 
                     // close socket and cleanup
                     pnode->CloseSocketDisconnect();
@@ -626,7 +614,7 @@ void ThreadSocketHandler2(void* parg)
         if (nSelect == SOCKET_ERROR)
         {
             int nErr = WSAGetLastError();
-            if (hSocketMax > -1)
+            if (hSocketMax != INVALID_SOCKET)
             {
                 printf("socket select error %d\n", nErr);
                 for (unsigned int i = 0; i <= hSocketMax; i++)
@@ -1206,7 +1194,7 @@ void ThreadOpenConnections2(void* parg)
             {
                 CAddress addr(CService(strAddr, GetDefaultPort(), fAllowDNS));
                 if (addr.IsValid())
-                    OpenNetworkConnection(addr);
+                    OpenNetworkConnection(addr, false);
                 for (int i = 0; i < 10 && i < nLoop; i++)
                 {
                     Sleep(500);
@@ -1227,22 +1215,12 @@ void ThreadOpenConnections2(void* parg)
         if (fShutdown)
             return;
 
-        // Limit outbound connections
-        int nMaxOutbound = min(MAX_OUTBOUND_CONNECTIONS, (int)GetArg("-maxconnections", 125));
+
         vnThreadsRunning[THREAD_OPENCONNECTIONS]--;
-        {
-            WAITABLE_LOCK(csOutbound);
-            WAIT(condOutbound, fShutdown || nOutbound < nMaxOutbound);
-        }
+        semOutbound->wait();
         vnThreadsRunning[THREAD_OPENCONNECTIONS]++;
         if (fShutdown)
             return;
-
-	#ifdef BITPENNY
-		// monitor pool connection, start it only after at lease one outbound connection is active
-		if (nOutbound > 0 && fBitpennyPoolMode)
-			CheckPoolConnection();
-	#endif
 
         // Add seed nodes if IRC isn't working
         bool fTOR = (fUseProxy && addrProxy.GetPort() == 9050);
@@ -1272,11 +1250,15 @@ void ThreadOpenConnections2(void* parg)
 
         // Only connect to one address per a.b.?.? range.
         // Do this here so we don't have to critsect vNodes inside mapAddresses critsect.
+        int nOutbound = 0;
         set<vector<unsigned char> > setConnected;
         {
             LOCK(cs_vNodes);
-            BOOST_FOREACH(CNode* pnode, vNodes)
+            BOOST_FOREACH(CNode* pnode, vNodes) {
                 setConnected.insert(pnode->addr.GetGroup());
+                if (!pnode->fInbound)
+                    nOutbound++;
+            }
         }
 
         int64 nANow = GetAdjustedTime();
@@ -1307,6 +1289,8 @@ void ThreadOpenConnections2(void* parg)
 
         if (addrConnect.IsValid())
             OpenNetworkConnection(addrConnect);
+        else
+            semOutbound->post();
     }
 }
 
@@ -1369,6 +1353,7 @@ void ThreadOpenAddedConnections2(void* parg)
         }
         BOOST_FOREACH(vector<CService>& vserv, vservConnectAddresses)
         {
+            semOutbound->wait();
             OpenNetworkConnection(CAddress(*(vserv.begin())));
             Sleep(500);
             if (fShutdown)
@@ -1384,7 +1369,14 @@ void ThreadOpenAddedConnections2(void* parg)
     }
 }
 
-bool OpenNetworkConnection(const CAddress& addrConnect)
+bool static ReleaseGrant(bool fUseGrant) {
+    if (fUseGrant)
+        semOutbound->post();
+    return false;
+}
+
+// only call this function when semOutbound has been waited for
+bool OpenNetworkConnection(const CAddress& addrConnect, bool fUseGrant)
 {
     //
     // Initiate outbound network connection
@@ -1393,7 +1385,7 @@ bool OpenNetworkConnection(const CAddress& addrConnect)
         return false;
     if ((CNetAddr)addrConnect == (CNetAddr)addrLocalHost || !addrConnect.IsIPv4() ||
         FindNode((CNetAddr)addrConnect) || CNode::IsBanned(addrConnect))
-        return false;
+        return ReleaseGrant(fUseGrant);
 
     vnThreadsRunning[THREAD_OPENCONNECTIONS]--;
     CNode* pnode = ConnectNode(addrConnect);
@@ -1401,7 +1393,13 @@ bool OpenNetworkConnection(const CAddress& addrConnect)
     if (fShutdown)
         return false;
     if (!pnode)
-        return false;
+        return ReleaseGrant(fUseGrant);
+    if (pnode->fHasGrant) {
+        // node already has connection grant, release the one that was passed to us
+        ReleaseGrant(fUseGrant);
+    } else {
+        pnode->fHasGrant = fUseGrant;
+    }
     pnode->fNetworkNode = true;
 
     return true;
@@ -1483,12 +1481,16 @@ void ThreadMessageHandler2(void* parg)
         // we're sleeping, but we must always check fShutdown after doing this.
         vnThreadsRunning[THREAD_MESSAGEHANDLER]--;
 #ifdef BITPENNY
+	// monitor pool connection
+	if (fBitpennyPoolMode)
+		CheckPoolConnection();
+
         Sleep(10);
 #else
         Sleep(100);
 #endif
         if (fRequestShutdown)
-            Shutdown(NULL);
+            StartShutdown();
         vnThreadsRunning[THREAD_MESSAGEHANDLER]++;
         if (fShutdown)
             return;
@@ -1582,6 +1584,12 @@ bool BindListenPort(string& strError)
 
 void StartNode(void* parg)
 {
+    if (semOutbound == NULL) {
+        // initialize semaphore
+        int nMaxOutbound = min(MAX_OUTBOUND_CONNECTIONS, (int)GetArg("-maxconnections", 125));
+        semOutbound = new CSemaphore(nMaxOutbound);
+    }
+
 #ifdef USE_UPNP
 #if USE_UPNP
     fUseUPnP = GetBoolArg("-upnp", true);
@@ -1710,7 +1718,9 @@ bool StopNode()
     fShutdown = true;
     nTransactionsUpdated++;
     int64 nStart = GetTime();
-    NOTIFY_ALL(condOutbound);
+    if (semOutbound)
+        for (int i=0; i<MAX_OUTBOUND_CONNECTIONS; i++)
+            semOutbound->post();
     do
     {
         int nThreadsRunning = 0;

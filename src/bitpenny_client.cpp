@@ -36,7 +36,7 @@ using namespace std;
 
 string FormatVersion(int nVersion);
 
-int nBitpennyClientVersion = 50100;
+int nBitpennyClientVersion = 50200;
 
 // bitpenny connection details
 bool fBitpennyPoolMode = false;
@@ -208,6 +208,9 @@ void MinerLog(const char* pszFormat, ...)
 
     localtime_r(&nTime, &tmTime);
 
+    static boost::mutex mutexMinerLog;
+    boost::mutex::scoped_lock scoped_lock(mutexMinerLog);
+
 	if (!fileout || nDayOpened != tmTime.tm_yday)
 	{
 		if(fileout) fclose(fileout);
@@ -288,7 +291,7 @@ bool BitpennyInit()
 // net.cpp
 ////////////////////////////////////////
 
-bool OpenNetworkConnection(const CAddress& addrConnect); // from net.cpp
+bool OpenNetworkConnection(const CAddress& addrConnect, bool fUseGrant = true);
 
 bool ConnectToPool()
 {
@@ -307,7 +310,7 @@ bool ConnectToPool()
 	if (addr.IsValid())
 	{
 		MinerLog("Connecting to %s\n", addr.ToStringIPPort().c_str());
-		OpenNetworkConnection(addr);
+		OpenNetworkConnection(addr, false); // BitPenny server is in addition to normal outbound connections
 		Sleep(500);
 
 		pnodeBitpennyHost = FindNode(addr);
