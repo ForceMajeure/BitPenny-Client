@@ -394,6 +394,8 @@ public:
     // Denial-of-service detection:
     mutable int nDoS;
     bool DoS(int nDoSIn, bool fIn) const { nDoS += nDoSIn; return fIn; }
+    // transaction hash caching
+    mutable uint256 hash;
 
     CTransaction()
     {
@@ -416,6 +418,7 @@ public:
         vout.clear();
         nLockTime = 0;
         nDoS = 0;  // Denial-of-service prevention
+        hash = 0;
     }
 
     bool IsNull() const
@@ -423,9 +426,14 @@ public:
         return (vin.empty() && vout.empty());
     }
 
-    uint256 GetHash() const
+    // transaction hash caching
+    // coinbase tx hash is always recalculated
+    uint256 GetHash(bool fForce = false) const
     {
-        return SerializeHash(*this);
+        if (hash == 0 || fForce || IsCoinBase())
+        	hash = SerializeHash(*this);
+
+    	return hash;
     }
 
     bool IsFinal(int nBlockHeight=0, int64 nBlockTime=0) const
