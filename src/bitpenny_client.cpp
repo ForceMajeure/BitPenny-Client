@@ -36,7 +36,7 @@ using namespace std;
 
 string FormatVersion(int nVersion);
 
-int nBitpennyClientVersion = 50200;
+int nBitpennyClientVersion = 50201;
 
 // bitpenny connection details
 bool fBitpennyPoolMode = false;
