@@ -1,3 +1,12 @@
+
+BitPenny is switching to the Stratum protocol.
+
+Please stop using BitPenny Client as it is not compatible with version 2 blocks and will no longer be supported or required.
+
+
+
+
+
 Official BitPenny Client Source Code (www.BitPenny.com)
 based on Bitcoin 0.6.3 codebase
 
